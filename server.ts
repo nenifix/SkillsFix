@@ -3,7 +3,8 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { Resend } from 'resend';
 import { google } from 'googleapis';
-import * as admin from 'firebase-admin';
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -18,17 +19,17 @@ const oauth2Client = new google.auth.OAuth2(
 );
 
 // Initialize Firebase Admin
-if (process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT) {
-  admin.initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT
-  });
-}
+const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || 'skillsfix-f5a3a';
+initializeApp({
+  projectId: projectId
+});
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // API Route for step notification
   app.post("/api/enrollment-update", async (req, res) => {
@@ -61,7 +62,7 @@ async function startServer() {
     // 2. Automated Google Sheets Sync on Completion
     if (current_step === 'completed' && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       try {
-        const db = admin.firestore();
+        const db = getFirestore();
         // Look for the Master Sheet ID and Tokens in a global settings doc
         const settingsSnap = await db.collection('platform_settings').doc('google_sheets').get();
         if (settingsSnap.exists) {
@@ -197,11 +198,11 @@ async function startServer() {
   app.post('/api/admin/set-master-sheet', async (req, res) => {
     const { spreadsheetId, tokens } = req.body;
     try {
-      const db = admin.firestore();
+      const db = getFirestore();
       await db.collection('platform_settings').doc('google_sheets').set({
         spreadsheetId,
         tokens,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp()
       }, { merge: true });
       res.json({ success: true });
     } catch (e) {

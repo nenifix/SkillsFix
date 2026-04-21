@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Check, Send, MessageCircle, ArrowRight, User, Mail, Phone, MapPin, Briefcase, Code, Target, HelpCircle, ShieldCheck, Copy, ExternalLink, Fingerprint, Download, Camera, Upload, X, Lock, Key, LogOut, ChevronLeft, Save, AlertCircle, Search, Table } from 'lucide-react';
+import { Check, Send, MessageCircle, ArrowRight, User, Mail, Phone, MapPin, Briefcase, Code, Target, HelpCircle, ShieldCheck, Copy, ExternalLink, Fingerprint, Download, Camera, Upload, X, Lock, Key, LogOut, ChevronLeft, Save, AlertCircle, Search, Table, Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { auth, db } from './lib/firebase';
 import { 
@@ -80,6 +80,7 @@ export default function App() {
   const [inputValue, setInputValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [tempImage, setTempImage] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -104,7 +105,7 @@ export default function App() {
 
   const fetchAllEnrollments = async () => {
     if (!isAdminUser) return;
-    setIsTyping(true);
+    setIsLoading(true);
     try {
       const q = collection(db, 'enrollments');
       const querySnapshot = await getDocs(q);
@@ -123,7 +124,7 @@ export default function App() {
       console.error("Error fetching enrollments", e);
       setError("Failed to fetch administrative data.");
     } finally {
-      setIsTyping(false);
+      setIsLoading(false);
     }
   };
 
@@ -136,7 +137,7 @@ export default function App() {
       if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
         const tokens = event.data.tokens;
         try {
-          setIsTyping(true);
+          setIsLoading(true);
           
           if (mode === 'admin') {
             // This is an admin connecting for "Master Sync"
@@ -173,7 +174,7 @@ export default function App() {
         } catch (e) {
           setError("Failed to communicate with sheets service.");
         } finally {
-          setIsTyping(false);
+          setIsLoading(false);
         }
       }
     };
@@ -278,7 +279,7 @@ export default function App() {
   const handleAuthAction = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    setIsTyping(true);
+    setIsLoading(true);
     try {
       if (mode === 'login') {
         await signInWithEmailAndPassword(auth, authEmail, authPassword);
@@ -291,7 +292,7 @@ export default function App() {
     } catch (e: any) {
       setError(e.message || "Authentication failed");
     } finally {
-      setIsTyping(false);
+      setIsLoading(false);
     }
   };
 
@@ -331,7 +332,7 @@ export default function App() {
 
   const handleGuestLogin = () => {
     setError(null);
-    setIsTyping(true);
+    setIsLoading(true);
     
     // Simulate thinking before "logging in" guest
     setTimeout(() => {
@@ -355,32 +356,37 @@ export default function App() {
       };
       setData(guestData);
       setCurrentStep(Step.COMPLETED);
-      setIsTyping(false);
+      setIsLoading(false);
       saveProgress(guestData, Step.COMPLETED);
       notifyAdmin(guestData, Step.COMPLETED);
     }, 800);
   };
 
   const handleExportCSV = () => {
-    const keys = Object.keys(data) as (keyof StudentData)[];
-    const headers = ["platform", "company", "program", "timestamp", ...keys];
-    const row = [
-      "AIFIX",
-      "NENIFIX",
-      "SkillsFix",
-      new Date().toISOString(),
-      ...keys.map(key => `"${(data[key] || '').toString().replace(/"/g, '""')}"`)
-    ];
+    setIsLoading(true);
+    
+    setTimeout(() => {
+      const keys = Object.keys(data) as (keyof StudentData)[];
+      const headers = ["platform", "company", "program", "timestamp", ...keys];
+      const row = [
+        "AIFIX",
+        "NENIFIX",
+        "SkillsFix",
+        new Date().toISOString(),
+        ...keys.map(key => `"${(data[key] || '').toString().replace(/"/g, '""')}"`)
+      ];
 
-    const csvContent = [headers.join(','), row.join(',')].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `skillsfix_enrollment_${data.full_name?.replace(/\s+/g, '_').toLowerCase() || 'new'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const csvContent = [headers.join(','), row.join(',')].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `skillsfix_enrollment_${data.full_name?.replace(/\s+/g, '_').toLowerCase() || 'new'}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setIsLoading(false);
+    }, 600);
   };
 
   const handleSimulateReset = (e: FormEvent) => {
@@ -962,13 +968,20 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 bg-[#1C1C1E] p-16 sm:p-20 overflow-y-auto relative">
         {/* Animated Progress Bar */}
-        <div className="absolute top-0 left-0 w-full h-1 bg-black/40 overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-black/40 overflow-hidden z-50">
           <motion.div 
             className="h-full bg-gradient-to-r from-[#0A84FF] to-[#5856D6]"
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
             transition={{ duration: 0.6, ease: "circOut" }}
           />
+          {isLoading && (
+            <motion.div 
+              className="absolute top-0 left-0 h-full w-full bg-white/30"
+              animate={{ x: ['-100%', '100%'] }}
+              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            />
+          )}
         </div>
 
         <div className="max-w-xl mx-auto h-full flex flex-col justify-center">
@@ -1021,10 +1034,10 @@ export default function App() {
                 <button 
                   type="submit"
                   onClick={handleAuthAction}
-                  disabled={isTyping}
+                  disabled={isLoading}
                   className="w-full bg-white text-black py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-neutral-200 transition-all shadow-lg active:scale-[0.98] disabled:opacity-50"
                 >
-                  {isTyping ? 'Authenticating...' : 'Login to Platform'}
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : 'Login to Platform'}
                 </button>
                 
                 {error && (
@@ -1077,10 +1090,10 @@ export default function App() {
 
                   <button 
                     type="submit"
-                    disabled={!authEmail || isTyping}
+                    disabled={!authEmail || isLoading}
                     className="w-full bg-[#0A84FF] text-white py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#0071e3] transition-all shadow-lg active:scale-[0.98] disabled:opacity-50"
                   >
-                    {isTyping ? 'Processing...' : 'Send Reset Link'} <Mail size={18} />
+                    {isLoading ? <Loader2 className="animate-spin" size={18} /> : 'Send Reset Link'} <Mail size={18} />
                   </button>
 
                   {error && <p className="text-center text-[#32D74B] text-xs font-semibold">{error}</p>}
@@ -1124,28 +1137,28 @@ export default function App() {
                   <div className="flex flex-wrap items-center gap-3">
                     <button 
                       onClick={handleExportToSheets}
-                      disabled={isTyping}
+                      disabled={isLoading}
                       className={`px-6 py-3 border rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 group ${
                         isSyncActive 
                         ? 'bg-[#FF9500]/10 border-[#FF9500]/20 text-[#FF9500] hover:bg-[#FF9500]/20' 
                         : 'bg-[#32D74B]/10 border-[#32D74B]/20 text-[#32D74B] hover:bg-[#32D74B]/20'
                       }`}
                     >
-                      <Table size={14} /> {isSyncActive ? 'Update Sync Target' : 'Enable Automated Sync'}
+                      {isLoading ? <Loader2 className="animate-spin" size={14} /> : <Table size={14} />} {isSyncActive ? 'Update Sync Target' : 'Enable Automated Sync'}
                     </button>
                     <button 
                       onClick={fetchAllEnrollments}
-                      disabled={isTyping}
+                      disabled={isLoading}
                       className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2"
                     >
-                      <Download size={14} /> Refresh Data
+                      {isLoading ? <Loader2 className="animate-spin" size={14} /> : <Download size={14} />} Refresh Data
                     </button>
                     <button 
                       onClick={handleExportCSV}
-                      disabled={enrollments.length === 0}
+                      disabled={enrollments.length === 0 || isLoading}
                       className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2"
                     >
-                      <Download size={14} /> Export CSV
+                      {isLoading ? <Loader2 className="animate-spin" size={14} /> : <Download size={14} />} Export CSV
                     </button>
                   </div>
                 </div>
