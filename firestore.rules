@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email_verified == true && 
+             (request.auth.token.email == 'godwintext@gmail.com' || 
+              request.auth.token.email == 'info@nenifix.com');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidEnrollment(data) {
+      return data.keys().hasAll(['email', 'userId']) &&
+             data.userId == request.auth.uid &&
+             data.email is string && data.email.size() <= 256 &&
+             (data.get('full_name', '') is string && data.get('full_name', '').size() <= 128) &&
+             (data.get('phone', '') == null || (data.get('phone', '') is string && data.get('phone', '').size() <= 32)) &&
+             (data.get('current_step', '') is string && data.get('current_step', '').size() <= 32) &&
+             (data.get('tos_agreement', false) is bool) &&
+             (data.get('email_verified', false) is bool) &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidSheetsSettings(data) {
+      return data.keys().hasAll(['spreadsheetId', 'tokens', 'updatedAt']) &&
+             data.spreadsheetId is string && data.spreadsheetId.size() <= 256 &&
+             data.tokens is map &&
+             data.updatedAt == request.time;
+    }
+
+    // --- Collections ---
+    match /enrollments/{enrollmentId} {
+      allow get: if isOwner(enrollmentId) || isAdmin(); // enrollmentId is userId here
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      
+      allow create: if isSignedIn() && 
+                      isValidId(enrollmentId) && 
+                      isValidEnrollment(incoming()) && 
+                      incoming().createdAt == request.time;
+
+      allow update: if isOwner(enrollmentId) && 
+                      isValidEnrollment(incoming()) &&
+                      incoming().userId == existing().userId &&
+                      incoming().createdAt == existing().createdAt && (
+                        // Progress Step / Data Update
+                        incoming().diff(existing()).affectedKeys().hasOnly(['current_step', 'updatedAt', 'student_data', 'email', 'full_name', 'phone', 'location_city', 'location_country', 'current_role', 'coding_experience_level', 'primary_motivation', 'desired_outcome', 'referral_source', 'tos_agreement', 'profile_picture', 'email_verified', 'free_resources_unlocked'])
+                        // Note: actual app stores student_data object in some places, 
+                        // but rules check top-level fields too based on App.tsx setDoc call.
+                      );
+                      
+      allow delete: if isOwner(enrollmentId);
+    }
+
+    match /platform_settings/google_sheets {
+      allow read, write: if isAdmin() && (request.method == 'get' || isValidSheetsSettings(incoming()));
+    }
+  }
+}

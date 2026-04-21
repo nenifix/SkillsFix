@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "enrollment": {
+      "title": "Student Enrollment",
+      "description": "Stores the progress and data of a student during the onboarding flow.",
+      "type": "object",
+      "properties": {
+        "full_name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "location_city": { "type": "string" },
+        "location_country": { "type": "string" },
+        "timezone_guess": { "type": "string" },
+        "current_role": { "type": "string" },
+        "coding_experience_level": { "type": "string" },
+        "primary_motivation": { "type": "string" },
+        "desired_outcome": { "type": "string" },
+        "referral_source": { "type": "string" },
+        "tos_agreement": { "type": "boolean" },
+        "free_resources_unlocked": { "type": "boolean" },
+        "telegram_community_shared": { "type": "string" },
+        "profile_picture": { "type": "string" },
+        "email_verified": { "type": "boolean" },
+        "current_step": { "type": "string" },
+        "userId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "userId"]
+    },
+    "sheets_settings": {
+      "title": "Google Sheets Settings",
+      "description": "Stores master spreadsheet ID and OAuth tokens for background sync.",
+      "type": "object",
+      "properties": {
+        "spreadsheetId": { "type": "string" },
+        "tokens": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/enrollments/{enrollmentId}": {
+      "schema": "enrollment",
+      "description": "Protected enrollment records. Only accessible by the owner."
+    },
+    "/platform_settings/google_sheets": {
+      "schema": "sheets_settings",
+      "description": "Sensitive admin-only configuration for automated sync."
+    }
+  }
+}
